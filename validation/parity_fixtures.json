@@ -1,0 +1,132 @@
+{
+  "_README": [
+    "Parity fixtures: Go-computed values must match Python POC values within 1e-9.",
+    "INPUTS below are pre-populated. EXPECTED fields are null (or empty string) until you fill them in.",
+    "",
+    "How to populate:",
+    "  1. Run the Python POC with the same inputs given in each scenario.",
+    "  2. Record Python's outputs in the 'expected' block of that scenario.",
+    "  3. Run: go test -v ./validation/...",
+    "  4. Test passes only when every populated value matches Go within tolerance.",
+    "",
+    "Tolerance: 1e-9 for float64; byte-identical hex strings for SHA-256.",
+    "If you populate a value and the test fails, the diff and both sides are reported.",
+    "",
+    "Sentinel: null means 'not yet populated' for floats; empty string for hashes.",
+    "Both pass through with a log line — they never fail the test."
+  ],
+  "indicator_scenarios": [
+    {
+      "name": "perfect_property",
+      "conditioned_data": {
+        "vibration_magnitude": 0.01,
+        "strain_magnitude": 50.0,
+        "temperature": 22.0,
+        "humidity": 50.0,
+        "air_quality_pm": 5.0,
+        "occupancy_ratio": 0.0,
+        "electrical_load": 0.0,
+        "water_consumption": 0.0,
+        "uptime_continuity": 1.0,
+        "cross_sensor_consistency": 1.0,
+        "calibration_recency": 30.0,
+        "tamper_score": 1.0,
+        "chronological_age": 0.0,
+        "maintenance_sensitivity": 0.5,
+        "condition_quality": 1.0
+      },
+      "baseline": {
+        "land_value": 500000.0,
+        "structure_value": 1000000.0,
+        "currency": "MYR"
+      },
+      "expected": {
+        "shf": null,
+        "esf": null,
+        "uss": null,
+        "pdp": null,
+        "ci": null,
+        "health_factor": null,
+        "rtpmv": null
+      }
+    },
+    {
+      "name": "degraded_property",
+      "conditioned_data": {
+        "vibration_magnitude": 0.2,
+        "strain_magnitude": 600.0,
+        "temperature": 35.0,
+        "humidity": 80.0,
+        "air_quality_pm": 45.0,
+        "occupancy_ratio": 0.95,
+        "electrical_load": 0.90,
+        "water_consumption": 0.85,
+        "uptime_continuity": 0.70,
+        "cross_sensor_consistency": 0.65,
+        "calibration_recency": 200.0,
+        "tamper_score": 0.80,
+        "chronological_age": 30.0,
+        "maintenance_sensitivity": 0.8,
+        "condition_quality": 0.3
+      },
+      "baseline": {
+        "land_value": 500000.0,
+        "structure_value": 1000000.0,
+        "currency": "MYR"
+      },
+      "expected": {
+        "shf": null,
+        "esf": null,
+        "uss": null,
+        "pdp": null,
+        "ci": null,
+        "health_factor": null,
+        "rtpmv": null
+      }
+    }
+  ],
+  "hash_scenarios": [
+    {
+      "name": "known_token_with_subhashes",
+      "conditioned_data": {
+        "vibration_magnitude": 0.05,
+        "strain_magnitude": 100.0,
+        "temperature": 22.0,
+        "humidity": 50.0,
+        "air_quality_pm": 10.0,
+        "occupancy_ratio": 0.5,
+        "electrical_load": 0.5,
+        "water_consumption": 0.5,
+        "uptime_continuity": 1.0,
+        "cross_sensor_consistency": 1.0,
+        "calibration_recency": 30.0,
+        "tamper_score": 1.0,
+        "chronological_age": 5.0,
+        "maintenance_sensitivity": 0.5,
+        "condition_quality": 1.0
+      },
+      "indicators": {
+        "shf": 1.0,
+        "esf": 1.0,
+        "uss": 0.5,
+        "pdp": 0.9,
+        "ci": 1.0
+      },
+      "token": {
+        "token_id": 1,
+        "property_id": "PROP-001",
+        "timestamp": 1234567890,
+        "conditioned_data_hash": "REPLACE_WITH_PYTHON_CONDITIONED_HASH",
+        "indicators_hash": "REPLACE_WITH_PYTHON_INDICATORS_HASH",
+        "rtpmv": 1000000.0,
+        "currency": "MYR",
+        "preceding_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "conditioned_data_hash": "",
+        "indicators_hash": "",
+        "token_hash": ""
+      }
+    }
+  ]
+}

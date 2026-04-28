@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+
+# ---- builder ----
+FROM golang:1.25-alpine AS builder
+WORKDIR /build
+
+COPY go.mod ./
+COPY go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /app/twinval-simulator ./cmd/simulator
+
+# ---- runtime ----
+FROM alpine:latest
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY --from=builder /app/twinval-simulator /app/twinval-simulator
+
+ENV TWINVAL_WEBHOOK_URL=http://localhost:8080/ingest/webhook
+ENV TWINVAL_PROPERTY_ID=PROP-ASHRAE-001
+ENV TWINVAL_SIM_INTERVAL_MS=1000
+
+ENTRYPOINT ["/app/twinval-simulator"]
