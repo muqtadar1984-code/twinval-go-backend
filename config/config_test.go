@@ -13,6 +13,7 @@ var allKeys = []string{
 	"TWINVAL_LAND_VALUE",
 	"TWINVAL_STRUCTURE_VALUE",
 	"TWINVAL_CURRENCY",
+	"PORT",
 }
 
 func clearEnv(t *testing.T) {
@@ -81,6 +82,25 @@ func TestLoadFromEnv_HonoursOverrides(t *testing.T) {
 	}
 	if cfg.Currency != "USD" {
 		t.Errorf("Currency: got %q, want USD", cfg.Currency)
+	}
+}
+
+func TestLoadFromEnv_PortFallsBackToPORTWhenTWINVAL_PORTAbsent(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("PORT", "7777")
+	cfg := LoadFromEnv()
+	if cfg.Port != "7777" {
+		t.Errorf("Port: got %q, want 7777 (PORT fallback)", cfg.Port)
+	}
+}
+
+func TestLoadFromEnv_TWINVAL_PORTBeatsPORT(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("PORT", "7777")
+	t.Setenv("TWINVAL_PORT", "9090")
+	cfg := LoadFromEnv()
+	if cfg.Port != "9090" {
+		t.Errorf("Port: got %q, want 9090 (TWINVAL_PORT wins over PORT)", cfg.Port)
 	}
 }
 

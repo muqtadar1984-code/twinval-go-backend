@@ -25,9 +25,13 @@ type AppConfig struct {
 
 // LoadFromEnv reads every supported environment variable and falls back
 // to defaults when a variable is unset, empty, or unparseable.
+//
+// Port resolution order: TWINVAL_PORT → PORT → "8080". The PORT fallback
+// keeps the binary compatible with PaaS hosts (Railway, Fly, Render) that
+// inject a dynamic PORT into the container.
 func LoadFromEnv() AppConfig {
 	return AppConfig{
-		Port:           getEnv("TWINVAL_PORT", "8080"),
+		Port:           resolvePort(),
 		PropertyID:     getEnv("TWINVAL_PROPERTY_ID", "PROP-ASHRAE-001"),
 		CORSOrigin:     getEnv("TWINVAL_CORS_ORIGIN", "*"),
 		ChainLimit:     getEnvInt("TWINVAL_CHAIN_LIMIT", 10),
@@ -35,6 +39,16 @@ func LoadFromEnv() AppConfig {
 		StructureValue: getEnvFloat("TWINVAL_STRUCTURE_VALUE", 1_000_000.0),
 		Currency:       getEnv("TWINVAL_CURRENCY", "MYR"),
 	}
+}
+
+func resolvePort() string {
+	if v := os.Getenv("TWINVAL_PORT"); v != "" {
+		return v
+	}
+	if v := os.Getenv("PORT"); v != "" {
+		return v
+	}
+	return "8080"
 }
 
 func getEnv(key, def string) string {
