@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -221,19 +222,53 @@ func processBatch(
 	})
 }
 
-// corsMiddleware adds permissive CORS headers to every response and
-// short-circuits OPTIONS preflight requests with 204 No Content. It
-// is registered as the outermost handler so per-route handlers do not
-// need to manage CORS themselves.
-func corsMiddleware(origin string, next http.Handler) http.Handler {
+// corsMiddleware adds CORS headers to every response and short-circuits
+// OPTIONS preflight requests with 204 No Content.
+//
+// originsCSV may be a single origin, "*" (wildcard), or a comma-separated
+// list. When given a list, the request's Origin header is matched against
+// the allowlist and the matching origin is echoed back exactly — browsers
+// require an exact echo (or "*") rather than a comma-separated list in
+// the Access-Control-Allow-Origin response header.
+func corsMiddleware(originsCSV string, next http.Handler) http.Handler {
+	allowed := parseOrigins(originsCSV)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		reqOrigin := r.Header.Get("Origin")
+		if origin := matchOrigin(allowed, reqOrigin); origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func parseOrigins(csv string) []string {
+	parts := strings.Split(csv, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// matchOrigin returns "*" if any allowed entry is "*", otherwise the
+// exact request origin if it matches an allowed entry, otherwise "".
+func matchOrigin(allowed []string, reqOrigin string) string {
+	for _, a := range allowed {
+		if a == "*" {
+			return "*"
+		}
+		if a == reqOrigin {
+			return reqOrigin
+		}
+	}
+	return ""
 }
