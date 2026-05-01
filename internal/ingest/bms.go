@@ -172,6 +172,7 @@ func bmsResponseToBatch(resp BMSResponse, cfg IngestConfig) condition.RawSensorB
 		})
 	}
 	return condition.RawSensorBatch{
+		PropertyID:                resp.PropertyID,
 		Readings:                  readings,
 		ExpectedReadingsPerSensor: cfg.DefaultExpectedReadingsPerSensor,
 		PropertyMeta:              cfg.DefaultPropertyMeta,

@@ -9,6 +9,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 // AppConfig is the full configuration struct used by cmd/api.
@@ -21,6 +22,21 @@ type AppConfig struct {
 	LandValue      float64
 	StructureValue float64
 	Currency       string
+
+	// PropertyMode selects single-property mode ("single", default) or
+	// the catalogued ASHRAE 5-building mode ("ashrae"). In ashrae mode,
+	// LandValue/StructureValue/Currency from env are ignored — each
+	// building carries its own valuation from internal/ashrae.Buildings.
+	PropertyMode string
+
+	// SimEnabled spawns the embedded simulator goroutine. In ashrae mode
+	// it drives all 5 buildings; in single mode it drives the configured
+	// PropertyID.
+	SimEnabled bool
+
+	// SimIntervalMs is the wall-clock interval between simulated ticks.
+	// Each tick advances the simulator by one simulated hour.
+	SimIntervalMs int
 }
 
 // LoadFromEnv reads every supported environment variable and falls back
@@ -38,7 +54,22 @@ func LoadFromEnv() AppConfig {
 		LandValue:      getEnvFloat("TWINVAL_LAND_VALUE", 500_000.0),
 		StructureValue: getEnvFloat("TWINVAL_STRUCTURE_VALUE", 1_000_000.0),
 		Currency:       getEnv("TWINVAL_CURRENCY", "MYR"),
+		PropertyMode:   getEnv("TWINVAL_PROPERTY_MODE", "single"),
+		SimEnabled:     getEnvBool("TWINVAL_SIM_ENABLED", false),
+		SimIntervalMs:  getEnvInt("TWINVAL_SIM_INTERVAL_MS", 1000),
 	}
+}
+
+func getEnvBool(key string, def bool) bool {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
+		switch strings.ToLower(v) {
+		case "1", "true", "yes", "on":
+			return true
+		case "0", "false", "no", "off":
+			return false
+		}
+	}
+	return def
 }
 
 func resolvePort() string {

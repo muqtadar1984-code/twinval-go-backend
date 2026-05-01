@@ -174,9 +174,8 @@ func (w *WebhookReceiver) closeSubscribers() {
 }
 
 // payloadToBatch translates a validated webhook payload into the
-// internal RawSensorBatch shape. PropertyID is dropped — RawSensorBatch
-// has no PropertyID field; downstream wiring associates batches with
-// properties out-of-band.
+// internal RawSensorBatch shape. PropertyID is forwarded so multi-
+// property API layers can route the batch to the correct PropertyState.
 func payloadToBatch(p WebhookPayload, cfg IngestConfig) condition.RawSensorBatch {
 	readings := make([]condition.RawSensorReading, len(p.Readings))
 	for i, r := range p.Readings {
@@ -190,6 +189,7 @@ func payloadToBatch(p WebhookPayload, cfg IngestConfig) condition.RawSensorBatch
 		}
 	}
 	return condition.RawSensorBatch{
+		PropertyID:                p.PropertyID,
 		Readings:                  readings,
 		WindowStartNs:             p.WindowStartNs,
 		WindowEndNs:               p.WindowEndNs,

@@ -47,7 +47,13 @@ type RawSensorReading struct {
 // RawSensorBatch carries all raw readings for one conditioning window
 // plus the property-level metadata that is forwarded directly to
 // compute.ConditionedData (no preprocessing applied).
+//
+// PropertyID is read by the API layer to route the batch to the right
+// PropertyState in a multi-property deployment. The condition pipeline
+// itself never reads PropertyID — it is pass-through metadata.
 type RawSensorBatch struct {
+	PropertyID string // optional; routing key for multi-property deployments
+
 	Readings []RawSensorReading
 
 	WindowStartNs int64 // start of the time window covered by this batch
