@@ -1,0 +1,62 @@
+# Per-sensor-type physical bounds for the live ingestion pipeline.
+#
+# - min/max define the absolute physical envelope. Readings outside this
+#   range are dropped by the validator with reason="out_of_range".
+# - normal_min/normal_max (optional) define the comfort band used by the
+#   indicator computers downstream. They are NOT used by the validator —
+#   they are forwarded to the indicator stage.
+#
+# Units must match the wire format the gateways emit. Do NOT change
+# unit strings without coordinating with deployed sensor producers.
+
+sensor_types:
+  vibration:
+    unit: "mm/s²"
+    min: 0.0
+    max: 50.0
+    normal_min: 0.0
+    normal_max: 5.0
+
+  strain:
+    unit: "με"
+    min: -500.0
+    max: 500.0
+
+  temperature:
+    unit: "°C"
+    min: -10.0
+    max: 60.0
+    normal_min: 18.0
+    normal_max: 28.0
+
+  humidity:
+    unit: "%RH"
+    min: 0.0
+    max: 100.0
+    normal_min: 30.0
+    normal_max: 70.0
+
+  air_quality_pm25:
+    unit: "µg/m³"
+    min: 0.0
+    max: 500.0
+
+  co2:
+    unit: "ppm"
+    min: 300.0
+    max: 5000.0
+
+  occupancy:
+    unit: "%"
+    min: 0.0
+    max: 100.0
+
+  electrical_load:
+    unit: "kW"
+    min: 0.0
+    max: 500.0
+
+  water_consumption:
+    unit: "L/hr"
+    min: 0.0
+    max: 1000.0

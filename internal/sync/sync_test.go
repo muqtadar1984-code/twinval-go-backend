@@ -306,7 +306,18 @@ func TestUpdate_ConcurrentUpdatesAndReadsAreSafe(t *testing.T) {
 	}
 	wg.Wait()
 
-	final := sm.CurrentState()
+	// Run() consumes Update() submissions asynchronously — wait briefly
+	// for the inbox to drain before we sample UpdateCount, otherwise
+	// this test races on heavily-loaded build hosts.
+	deadline := time.Now().Add(2 * time.Second)
+	var final DigitalTwinState
+	for time.Now().Before(deadline) {
+		final = sm.CurrentState()
+		if final.UpdateCount > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	if final.UpdateCount == 0 {
 		t.Errorf("expected non-zero UpdateCount after %d ops, got 0", goroutines*opsPerG)
 	}

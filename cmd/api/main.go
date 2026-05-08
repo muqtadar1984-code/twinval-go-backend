@@ -38,11 +38,20 @@ import (
 	"github.com/twinval/internal/cryptochain"
 	"github.com/twinval/internal/exchange"
 	"github.com/twinval/internal/ingest"
+	ingconfig "github.com/twinval/internal/ingestion/config"
 	twinsync "github.com/twinval/internal/sync"
 )
 
 func main() {
 	cfg := config.LoadFromEnv()
+
+	// Live-vs-simulated branch comes from TWINVAL_DATA_SOURCE. Loading
+	// it never returns an error in simulated mode (the default), so a
+	// vanilla deployment behaves byte-identically to before.
+	liveCfg, err := ingconfig.Load()
+	if err != nil {
+		log.Fatalf("ingestion config: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -62,20 +71,7 @@ func main() {
 	// Bootstrap one or many properties depending on TWINVAL_PROPERTY_MODE.
 	bootstrapAll(ctx, cfg, registry)
 
-	// Set up ingest webhook receiver. We mount its Handler() on the main
-	// mux instead of letting it bind its own listener.
-	ingestCfg := ingest.DefaultIngestConfig()
-	ingestCfg.WebhookPath = "/ingest/webhook"
-	receiver := ingest.NewWebhookReceiver(ingestCfg)
-
-	batchCh := receiver.Subscribe()
-	go runPipeline(ctx, cfg, registry, hub, batchCh)
-
-	// Optional embedded ASHRAE simulator — feeds the pipeline without
-	// requiring external POSTs. Toggled by TWINVAL_SIM_ENABLED.
-	if cfg.SimEnabled {
-		go runEmbeddedSimulator(ctx, cfg, registry, hub)
-	}
+	mux := http.NewServeMux()
 
 	handlers := &api.Handlers{
 		Registry:          registry,
@@ -83,15 +79,43 @@ func main() {
 		DefaultChainLimit: cfg.ChainLimit,
 		Version:           "1.0.0",
 	}
-
-	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.HandleFunc("GET /api/v1/properties", handlers.Properties)
 	mux.HandleFunc("GET /api/v1/property/{id}/valuation", handlers.Valuation)
 	mux.HandleFunc("GET /api/v1/property/{id}/chain", handlers.Chain)
 	mux.HandleFunc("GET /api/v1/property/{id}/audit", handlers.Audit)
-	mux.Handle("/ingest/webhook", receiver.Handler())
 	mux.Handle("/ws/property/{id}", api.WebSocketHandler(hub))
+
+	// SIMULATED MODE — the existing ASHRAE-driven path. Untouched.
+	// LIVE MODE — start the new ingestion pipeline; the legacy webhook
+	// + simulator are NOT started so the two paths cannot fight over
+	// the /ingest/webhook route.
+	var liveBundle *liveBundle
+	if liveCfg.IsLive() {
+		bundle, err := startLivePipeline(ctx, liveCfg, hub, mux)
+		if err != nil {
+			log.Fatalf("live pipeline: %v", err)
+		}
+		liveBundle = bundle
+	} else {
+		// Set up legacy ingest webhook receiver + simulated path. We mount
+		// its Handler() on the main mux instead of letting it bind its
+		// own listener.
+		ingestCfg := ingest.DefaultIngestConfig()
+		ingestCfg.WebhookPath = "/ingest/webhook"
+		receiver := ingest.NewWebhookReceiver(ingestCfg)
+
+		batchCh := receiver.Subscribe()
+		go runPipeline(ctx, cfg, registry, hub, batchCh)
+
+		mux.Handle("/ingest/webhook", receiver.Handler())
+
+		// Optional embedded ASHRAE simulator — feeds the pipeline without
+		// requiring external POSTs. Toggled by TWINVAL_SIM_ENABLED.
+		if cfg.SimEnabled {
+			go runEmbeddedSimulator(ctx, cfg, registry, hub)
+		}
+	}
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -100,8 +124,8 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("twinval-api listening on :%s (mode=%s, sim=%v, properties=%d)",
-			cfg.Port, cfg.PropertyMode, cfg.SimEnabled, registry.Len())
+		log.Printf("twinval-api listening on :%s (mode=%s, sim=%v, properties=%d, data_source=%s)",
+			cfg.Port, cfg.PropertyMode, cfg.SimEnabled, registry.Len(), liveCfg.DataSource)
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("server error: %v", err)
 			cancel()
@@ -111,10 +135,13 @@ func main() {
 	<-ctx.Done()
 	log.Println("shutdown initiated")
 
-	shutdownCtx, sc := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, sc := context.WithTimeout(context.Background(), 30*time.Second)
 	defer sc()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("shutdown error: %v", err)
+	}
+	if liveBundle != nil {
+		liveBundle.shutdown(shutdownCtx)
 	}
 	log.Println("twinval-api stopped")
 }

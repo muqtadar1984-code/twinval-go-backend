@@ -1,0 +1,64 @@
+# Modbus TCP register map for legacy BMS systems at IIUM pilot buildings.
+#
+# Each device is a Modbus slave reachable over TCP. Each sensor is one
+# input register (or holding register) on that slave. The poller reads
+# all sensors at the configured poll_interval_seconds.
+#
+# scale: raw_register_value * scale = physical_value (in `unit`)
+# quality: static quality score [0,1] for this register — Modbus has no
+#          per-reading signal-quality field, so set per device based on
+#          confidence in the BMS source.
+#
+# REPLACE the example devices below with your actual IIUM BMS coordinates
+# before going live. The values here are placeholders for development.
+
+poll_interval_seconds: 30
+
+devices:
+  - host: "10.0.0.10"
+    port: 502
+    unit_id: 1
+    name: "IIUM Block A — HVAC controller"
+    sensors:
+      - register: 100
+        register_type: "input"      # input | holding
+        sensor_id: "IIUM-BLK-A-TEMP-01"
+        sensor_type: "temperature"
+        building: "Block A"
+        zone: "Roof - HVAC"
+        unit: "°C"
+        scale: 0.1
+        quality: 1.0
+      - register: 101
+        register_type: "input"
+        sensor_id: "IIUM-BLK-A-HUM-01"
+        sensor_type: "humidity"
+        building: "Block A"
+        zone: "Roof - HVAC"
+        unit: "%RH"
+        scale: 0.1
+        quality: 1.0
+      - register: 102
+        register_type: "input"
+        sensor_id: "IIUM-BLK-A-CO2-01"
+        sensor_type: "co2"
+        building: "Block A"
+        zone: "Floor 3 - Lab"
+        unit: "ppm"
+        scale: 1.0
+        quality: 1.0
+
+  - host: "10.0.0.11"
+    port: 502
+    unit_id: 1
+    name: "IIUM Block B — electrical panel"
+    sensors:
+      - register: 200
+        register_type: "holding"
+        sensor_id: "IIUM-BLK-B-ELEC-01"
+        sensor_type: "electrical_load"
+        building: "Block B"
+        zone: "Main panel"
+        unit: "kW"
+        scale: 0.01
+        quality: 0.95
