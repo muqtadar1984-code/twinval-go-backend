@@ -117,6 +117,57 @@ func TestComputeUSS_FullLoad(t *testing.T) {
 	}
 }
 
+func TestComputeUSS_DefaultDeadbandIsZero_ParityPreserved(t *testing.T) {
+	// With default config (no deadband) the legacy linear behaviour must
+	// hold exactly — this is the Python-POC parity guarantee.
+	data := ConditionedData{
+		OccupancyRatio:   0.4,
+		ElectricalLoad:   0.5,
+		WaterConsumption: 0.2,
+	}
+	uss := ComputeUSS(data, DefaultUSSConfig())
+	want := 0.5*0.4 + 0.3*0.5 + 0.2*0.2 // 0.39
+	if math.Abs(uss-want) > tolerance {
+		t.Errorf("USS default deadband: got %v, want %v", uss, want)
+	}
+}
+
+func TestComputeUSS_NormalUseDeadband(t *testing.T) {
+	// Residential calibration: usage at or below the normal-use
+	// threshold produces zero stress.
+	cfg := DefaultUSSConfig()
+	cfg.OccupancyNormalUse = 0.40
+	cfg.ElectricalNormalUse = 0.30
+	cfg.WaterNormalUse = 0.30
+
+	within := ConditionedData{
+		OccupancyRatio:   0.35,
+		ElectricalLoad:   0.25,
+		WaterConsumption: 0.10,
+	}
+	if uss := ComputeUSS(within, cfg); math.Abs(uss) > tolerance {
+		t.Errorf("USS within deadband: got %v, want 0.0", uss)
+	}
+
+	// Above the threshold, stress scales linearly to 1.0 at capacity.
+	above := ConditionedData{
+		OccupancyRatio:   0.70, // (0.70-0.40)/0.60 = 0.5
+		ElectricalLoad:   0.65, // (0.65-0.30)/0.70 = 0.5
+		WaterConsumption: 0.30, // at threshold = 0
+	}
+	uss := ComputeUSS(above, cfg)
+	want := 0.5*0.5 + 0.3*0.5 // 0.40
+	if math.Abs(uss-want) > tolerance {
+		t.Errorf("USS above deadband: got %v, want %v", uss, want)
+	}
+
+	// Full capacity still scores full stress regardless of deadband.
+	full := ConditionedData{OccupancyRatio: 1.0, ElectricalLoad: 1.0, WaterConsumption: 1.0}
+	if uss := ComputeUSS(full, cfg); math.Abs(uss-1.0) > tolerance {
+		t.Errorf("USS full load with deadband: got %v, want 1.0", uss)
+	}
+}
+
 func TestComputePDP_NewProperty(t *testing.T) {
 	data := perfectPropertyData() // ChronologicalAge = 0
 	cfg := DefaultPDPConfig()

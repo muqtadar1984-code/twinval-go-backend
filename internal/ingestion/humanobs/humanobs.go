@@ -10,8 +10,11 @@
 //	Watch  -> -0.05
 //	Alert  -> -0.15
 //
-// The sum is clamped to [-1, +1] before being returned; the downstream
-// Computer further clamps the final CI to [0, 1].
+// The positive (Normal) component is capped at DefaultMaxPositiveDelta
+// so that accumulated confirmations cannot saturate CI and mask
+// concurrent warnings; Watch/Alert contributions are uncapped. The
+// resulting sum is clamped to [-1, +1] before being returned; the
+// downstream Computer further clamps the final CI to [0, 1].
 //
 // Voided observations are excluded — they are the audit-correct
 // equivalent of delete in the portal, and their CI signal is retracted.
@@ -38,6 +41,16 @@ const (
 	WeightAlert  float64 = -0.15
 )
 
+// DefaultMaxPositiveDelta caps the total CI credit that Normal
+// confirmations can accumulate within one window. The per-observation
+// weights above were tuned for the 4-hour default window; with wider
+// windows (the bungalow pilot runs 7 days) uncapped Normals saturate
+// CI at 1.0 and mask concurrent Watch/Alert signals entirely. Only the
+// positive component is capped — warnings remain uncapped so an Alert
+// always shows in CI regardless of how many confirmations surround it.
+// Treated as a formal model parameter, like the weights above.
+const DefaultMaxPositiveDelta float64 = 0.10
+
 // SeverityCounts is the breakdown of a window's observations by severity.
 // Returned by the fetcher rather than building/zone-specific math so the
 // fetcher contract stays narrow.
@@ -57,10 +70,11 @@ type Fetcher interface {
 // Modifier turns FetchSeverityCounts results into a CI delta. Implements
 // the ingestion.CIModifier interface (Delta(building, zone) float64).
 type Modifier struct {
-	fetcher Fetcher
-	window  time.Duration
-	timeout time.Duration
-	now     func() time.Time
+	fetcher     Fetcher
+	window      time.Duration
+	timeout     time.Duration
+	maxPositive float64
+	now         func() time.Time
 
 	// counters — wired to Prometheus in Phase 5.
 	queries   atomic.Uint64
@@ -79,10 +93,11 @@ func NewModifier(fetcher Fetcher, window time.Duration) *Modifier {
 		window = 4 * time.Hour
 	}
 	return &Modifier{
-		fetcher: fetcher,
-		window:  window,
-		timeout: 2 * time.Second,
-		now:     time.Now,
+		fetcher:     fetcher,
+		window:      window,
+		timeout:     2 * time.Second,
+		maxPositive: DefaultMaxPositiveDelta,
+		now:         time.Now,
 	}
 }
 
@@ -91,6 +106,16 @@ func NewModifier(fetcher Fetcher, window time.Duration) *Modifier {
 func (m *Modifier) WithTimeout(t time.Duration) *Modifier {
 	if t > 0 {
 		m.timeout = t
+	}
+	return m
+}
+
+// WithMaxPositiveDelta overrides the cap on accumulated Normal-observation
+// credit. Values <= 0 are ignored (the default cap stays). Returns the
+// modifier for chaining at construction time.
+func (m *Modifier) WithMaxPositiveDelta(cap float64) *Modifier {
+	if cap > 0 {
+		m.maxPositive = cap
 	}
 	return m
 }
@@ -129,7 +154,11 @@ func (m *Modifier) Delta(building, zone string) float64 {
 		metrics.HumanObsApplied.WithLabelValues(building, zone, "Alert").Add(float64(counts.Alert))
 	}
 
-	delta := float64(counts.Normal)*WeightNormal +
+	positive := float64(counts.Normal) * WeightNormal
+	if positive > m.maxPositive {
+		positive = m.maxPositive
+	}
+	delta := positive +
 		float64(counts.Watch)*WeightWatch +
 		float64(counts.Alert)*WeightAlert
 	if delta < -1 {

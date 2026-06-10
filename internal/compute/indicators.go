@@ -128,13 +128,34 @@ func rangeScore(value, min, max float64) float64 {
 // =============================================================================
 
 // USSConfig holds weighting for usage stress sources.
+//
+// The NormalUse thresholds define a no-penalty deadband per source:
+// usage at or below the threshold produces zero stress, mirroring the
+// flat region every other indicator already has (SHF's vibration
+// ceiling, ESF's comfort bands). Without a deadband, ANY occupancy or
+// load registers as stress — which over-discounts normally occupied
+// residential property (a building operating as designed is not being
+// stressed). Above the threshold, stress scales linearly to 1.0 at
+// full design capacity.
 type USSConfig struct {
-	OccupancyWeight    float64
-	ElectricalWeight   float64
-	WaterWeight        float64
+	OccupancyWeight  float64
+	ElectricalWeight float64
+	WaterWeight      float64
+
+	// No-penalty thresholds, each in the same normalised [0, 1] units
+	// as the corresponding ConditionedData input. Zero = no deadband
+	// (legacy behaviour). Residential calibration (bungalow pilot):
+	// occupancy 0.40, electrical 0.30, water 0.30 — keep in lockstep
+	// with the Excel workbooks' Config sheet.
+	OccupancyNormalUse  float64
+	ElectricalNormalUse float64
+	WaterNormalUse      float64
 }
 
 // DefaultUSSConfig returns the config used in the Python POC.
+// NormalUse thresholds default to 0 so numerical parity with the
+// Python POC is preserved (validation/parity_test.go); residential
+// deployments override them via configuration.
 func DefaultUSSConfig() USSConfig {
 	return USSConfig{
 		OccupancyWeight:  0.5,
@@ -148,12 +169,26 @@ func DefaultUSSConfig() USSConfig {
 // IMPORTANT: USS is applied as (1 − USS) in the Health Factor formula.
 // This function returns the raw stress value [0.0, 1.0] where:
 //   - 1.0 = property operating at or above design capacity (maximum stress)
-//   - 0.0 = property idle (no stress)
+//   - 0.0 = property idle, or operating within its normal-use deadband
 func ComputeUSS(data ConditionedData, cfg USSConfig) float64 {
-	uss := cfg.OccupancyWeight*clamp(data.OccupancyRatio, 0.0, 1.0) +
-		cfg.ElectricalWeight*clamp(data.ElectricalLoad, 0.0, 1.0) +
-		cfg.WaterWeight*clamp(data.WaterConsumption, 0.0, 1.0)
+	uss := cfg.OccupancyWeight*usageStress(data.OccupancyRatio, cfg.OccupancyNormalUse) +
+		cfg.ElectricalWeight*usageStress(data.ElectricalLoad, cfg.ElectricalNormalUse) +
+		cfg.WaterWeight*usageStress(data.WaterConsumption, cfg.WaterNormalUse)
 	return clamp(uss, 0.0, 1.0)
+}
+
+// usageStress maps a normalised usage reading to [0, 1] stress with a
+// no-penalty deadband: 0 at or below normalUse, then linear to 1.0 at
+// full capacity. A normalUse >= 1 disables the source entirely.
+func usageStress(reading, normalUse float64) float64 {
+	r := clamp(reading, 0.0, 1.0)
+	if r <= normalUse {
+		return 0.0
+	}
+	if normalUse >= 1.0 {
+		return 0.0
+	}
+	return (r - normalUse) / (1.0 - normalUse)
 }
 
 // =============================================================================

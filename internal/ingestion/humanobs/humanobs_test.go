@@ -87,12 +87,38 @@ func TestModifier_ClampsAtNegativeOne(t *testing.T) {
 	}
 }
 
-func TestModifier_ClampsAtPositiveOne(t *testing.T) {
-	// 100 normals would yield +2.0; must clamp at +1.
+func TestModifier_PositiveCreditCapped(t *testing.T) {
+	// 100 normals would yield +2.0 uncapped; the positive component
+	// must cap at DefaultMaxPositiveDelta.
 	m := NewModifier(&fakeFetcher{counts: SeverityCounts{Normal: 100}}, time.Hour)
 	got := m.Delta("B", "Z")
-	if got != 1 {
-		t.Fatalf("expected clamp at +1, got %v", got)
+	if got != DefaultMaxPositiveDelta {
+		t.Fatalf("expected positive cap %v, got %v", DefaultMaxPositiveDelta, got)
+	}
+}
+
+func TestModifier_AlertVisibleThroughManyNormals(t *testing.T) {
+	// The cap exists so warnings stay visible: 50 Normals + 1 Alert must
+	// land net-negative, not saturate at the cap.
+	m := NewModifier(&fakeFetcher{counts: SeverityCounts{Normal: 50, Alert: 1}}, time.Hour)
+	got := m.Delta("B", "Z")
+	want := DefaultMaxPositiveDelta + WeightAlert // 0.10 - 0.15 = -0.05
+	if math.Abs(got-want) > 1e-9 {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestModifier_WithMaxPositiveDeltaOverride(t *testing.T) {
+	m := NewModifier(&fakeFetcher{counts: SeverityCounts{Normal: 100}}, time.Hour).
+		WithMaxPositiveDelta(0.25)
+	if got := m.Delta("B", "Z"); got != 0.25 {
+		t.Fatalf("expected overridden cap 0.25, got %v", got)
+	}
+	// Non-positive override is ignored.
+	m2 := NewModifier(&fakeFetcher{counts: SeverityCounts{Normal: 100}}, time.Hour).
+		WithMaxPositiveDelta(0)
+	if got := m2.Delta("B", "Z"); got != DefaultMaxPositiveDelta {
+		t.Fatalf("expected default cap retained, got %v", got)
 	}
 }
 

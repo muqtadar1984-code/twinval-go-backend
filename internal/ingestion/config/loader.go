@@ -67,6 +67,12 @@ type IngestionConfig struct {
 	// Human-observation CI modifier window
 	HumanObsWindow time.Duration
 
+	// HumanObsMaxPositiveDelta caps accumulated Normal-observation CI
+	// credit per window. Critical when HumanObsWindow is widened (e.g.
+	// 7 days for the bungalow pilot): uncapped Normals saturate CI and
+	// mask Watch/Alert signals. Warnings are never capped.
+	HumanObsMaxPositiveDelta float64
+
 	// Observability
 	LogLevel     string
 	MetricsPort  int
@@ -149,6 +155,7 @@ func Load() (IngestionConfig, error) {
 	cfg.DBWriteWorkers = getEnvInt("DB_WRITE_WORKERS", 4)
 
 	cfg.HumanObsWindow = time.Duration(getEnvInt("HUMAN_OBS_WINDOW_HOURS", 4)) * time.Hour
+	cfg.HumanObsMaxPositiveDelta = getEnvFloat("HUMAN_OBS_MAX_POSITIVE_DELTA", 0.10)
 
 	cfg.LogLevel = strings.ToLower(getEnv("LOG_LEVEL", "info"))
 	cfg.MetricsPort = getEnvInt("METRICS_PORT", 9090)

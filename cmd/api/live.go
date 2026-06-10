@@ -83,7 +83,8 @@ func startLivePipeline(
 
 	// 2. Human-observation CI modifier (read-only on portal tables).
 	fetcher := humanobs.NewPgFetcher(pool)
-	modifier := humanobs.NewModifier(fetcher, cfg.HumanObsWindow)
+	modifier := humanobs.NewModifier(fetcher, cfg.HumanObsWindow).
+		WithMaxPositiveDelta(cfg.HumanObsMaxPositiveDelta)
 
 	// 3. Static property valuation registry.
 	// Phase 4 wires sensible defaults; Phase 5+ can read these from a
